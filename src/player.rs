@@ -6,6 +6,7 @@ use std::f32::consts::PI;
 pub struct Player {
     pub pos: Vec2,
     pub a: f32, //angle of view
+    pub fov: f32, // field of view
 }
 
 

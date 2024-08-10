@@ -2,7 +2,7 @@ mod maze;
 mod framebuffer;
 mod player;
 use minifb::Key;
-use core::f32::consts::PI;
+use core::{f32::consts::PI, num};
 use nalgebra_glm::Vec2;
 use player::{Player, process_events};
 use std::time::Duration;
@@ -55,7 +55,14 @@ fn render2d(framebuffer: &mut Framebuffer, player: &Player){
 
     framebuffer.set_current_color(0xFFFFFF);
     framebuffer.point(player.pos.x as usize, player.pos.y as usize); 
-    cast_ray(framebuffer, &maze, player, player.a, block_size, true); 
+
+    let num_rays = 100; 
+
+    for i in 0..num_rays {
+        let current_ray = (i as f32/ num_rays as f32); 
+        let a = player.a - (player.fov / 2.0) + (player.fov * current_ray); 
+        cast_ray(framebuffer, &maze, player, a, block_size, true); 
+    }
 }
 
 fn main() {
@@ -86,6 +93,7 @@ fn main() {
     let mut player = Player{
         pos: Vec2::new(150.0, 150.0),
         a: PI/3.0, 
+        fov: PI/3.0,
     };
 
     while window.is_open(){
