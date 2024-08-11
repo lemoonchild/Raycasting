@@ -40,6 +40,6 @@ pub fn cast_ray(
                 impact: maze[j][i],
             };
         }
-        d += 10.0; 
+        d += 1.5; 
     }
 }

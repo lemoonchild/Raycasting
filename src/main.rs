@@ -65,6 +65,34 @@ fn render2d(framebuffer: &mut Framebuffer, player: &Player){
     }
 }
 
+fn render3d(framebuffer: &mut Framebuffer, player: &Player){
+
+    let maze = load_maze("./maze.txt");
+    let block_size = 100; 
+
+    let hh =  framebuffer.height as f32/2.0;
+    
+    let num_rays = framebuffer.width; 
+
+    for i in 0..num_rays {
+        let current_ray = i as f32/ num_rays as f32; 
+        let a = player.a - (player.fov / 2.0) + (player.fov * current_ray); 
+        let intersect = cast_ray(framebuffer, &maze, player, a, block_size, false);
+
+
+        let stake_height = (framebuffer.height as f32 / intersect.distance) * 70.0; 
+
+        let stake_top = (hh - (stake_height / 2.0 )) as usize; 
+        let stake_bottom = (hh + (stake_height / 2.0 )) as usize;
+
+        for y in stake_top..stake_bottom{
+            framebuffer.set_current_color(0x33AADD);
+            framebuffer.point(i, y);
+        }
+    }
+
+}
+
 fn main() {
     let window_width = 1300;
     let window_height = 900;
@@ -96,7 +124,7 @@ fn main() {
         fov: PI/3.0,
     };
 
-    let mut mode = "2D"; 
+    let mut mode = "3D"; 
 
     while window.is_open(){
         //listen to inputs
@@ -115,7 +143,7 @@ fn main() {
         if mode == "2D"{
             render2d(&mut framebuffer, &player);
         } else {
-            
+            render3d(&mut framebuffer, &player)
         }
 
         window
