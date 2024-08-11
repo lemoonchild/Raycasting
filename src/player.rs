@@ -1,6 +1,7 @@
 use minifb::{Window, Key};
 use nalgebra_glm::Vec2;
 use std::f32::consts::PI;
+use crate::maze::is_wall;
 
 
 pub struct Player {
@@ -10,12 +11,13 @@ pub struct Player {
 }
 
 
-pub fn process_events(window: &Window, player: &mut Player){
+pub fn process_events(window: &Window, player: &mut Player, maze: &Vec<Vec<char>>) {
     const MOVE_SPEED: f32 = 10.0;
     const ROTATION_SPEED: f32 = PI / 10.0; 
 
+    let mut new_pos_x = player.pos.x;
+    let mut new_pos_y = player.pos.y;
 
-    // Rotación con las teclas A y D
     if window.is_key_down(Key::A){
         player.a -= ROTATION_SPEED;
     }
@@ -23,24 +25,35 @@ pub fn process_events(window: &Window, player: &mut Player){
         player.a += ROTATION_SPEED;
     }
 
-    // Movimiento hacia adelante y hacia atrás con las teclas W y S
+    let forward_x = player.pos.x + MOVE_SPEED * player.a.cos();
+    let forward_y = player.pos.y + MOVE_SPEED * player.a.sin();
 
-    if window.is_key_down(Key::W){
-        player.pos.x = player.pos.x + MOVE_SPEED * player.a.cos();
-        player.pos.y = player.pos.y + MOVE_SPEED * player.a.sin(); 
+    let backward_x = player.pos.x - MOVE_SPEED * player.a.cos();
+    let backward_y = player.pos.y - MOVE_SPEED * player.a.sin();
+
+    let strafe_left_x = player.pos.x + MOVE_SPEED * player.a.sin();
+    let strafe_left_y = player.pos.y - MOVE_SPEED * player.a.cos();
+
+    let strafe_right_x = player.pos.x - MOVE_SPEED * player.a.sin();
+    let strafe_right_y = player.pos.y + MOVE_SPEED * player.a.cos();
+
+    if window.is_key_down(Key::W) && !is_wall(maze, forward_x as usize, forward_y as usize) {
+        new_pos_x = forward_x;
+        new_pos_y = forward_y;
     }
-    if window.is_key_down(Key::S){
-        player.pos.x = player.pos.x - MOVE_SPEED * player.a.cos();
-        player.pos.y = player.pos.y - MOVE_SPEED * player.a.sin(); 
+    if window.is_key_down(Key::S) && !is_wall(maze, backward_x as usize, backward_y as usize) {
+        new_pos_x = backward_x;
+        new_pos_y = backward_y;
+    }
+    if window.is_key_down(Key::Q) && !is_wall(maze, strafe_left_x as usize, strafe_left_y as usize) {
+        new_pos_x = strafe_left_x;
+        new_pos_y = strafe_left_y;
+    }
+    if window.is_key_down(Key::E) && !is_wall(maze, strafe_right_x as usize, strafe_right_y as usize) {
+        new_pos_x = strafe_right_x;
+        new_pos_y = strafe_right_y;
     }
 
-    // Movimiento lateral (strafe) con las teclas Q y E
-    if window.is_key_down(Key::Q) {
-        player.pos.x += MOVE_SPEED * player.a.sin();
-        player.pos.y -= MOVE_SPEED * player.a.cos();
-    }
-    if window.is_key_down(Key::E) {
-        player.pos.x -= MOVE_SPEED * player.a.sin();
-        player.pos.y += MOVE_SPEED * player.a.cos();
-    }
+    player.pos.x = new_pos_x;
+    player.pos.y = new_pos_y;
 }
