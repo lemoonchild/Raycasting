@@ -15,6 +15,7 @@ pub fn cast_ray(
     a: f32, 
     block_size: usize,
     draw_line: bool,
+    
 ) -> Intersect {
     let mut d = 0.0; 
 

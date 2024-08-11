@@ -21,8 +21,8 @@ mod texture;
 use texture::Texture;
 
 static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
-static WALL2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall2.png")));
+static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
+
 
 fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
 
@@ -30,8 +30,8 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
 
     match cell {
         '+' => WALL1.get_pixel_color(tx, ty),
-        '-' => WALL2.get_pixel_color(tx, ty),
-        '|' => WALL2.get_pixel_color(tx, ty),
+        '-' => WALL1.get_pixel_color(tx, ty),
+        '|' => WALL1.get_pixel_color(tx, ty),
         'g' => DOOR.get_pixel_color(tx, ty),
         _ => default_color,
 
@@ -81,7 +81,6 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
     
     for i in 0..framebuffer.width {
-
         framebuffer.set_current_color(0x383838);
         for j in 0..(framebuffer.height / 2){
             framebuffer.point(i, j);
@@ -101,7 +100,7 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
         let distance = intersect.distance * (a - player.a).cos();
 
-        let stake_height = (framebuffer.height as f32 / distance) * 70.0; 
+        let stake_height = (framebuffer.height as f32 / distance) * 50.0; 
 
         let stake_top = (hh - (stake_height / 2.0 )) as usize; 
         let stake_bottom = (hh + (stake_height / 2.0 )) as usize;
@@ -143,32 +142,18 @@ fn main() {
     // initialize values
     framebuffer.set_background_color(0x333355);
 
-    window.limit_update_rate(Some(Duration::from_millis(50))); // 20 fps
-    window.set_cursor_visibility(false); // Ocultar el cursor
+    window.set_cursor_visibility(false); 
 
     let maze = load_maze("./maze.txt");
 
     let mut player = Player{
         pos: Vec2::new(150.0, 150.0),
-        a: PI/3.0, 
+        a: PI/1.5, 
         fov: PI/4.0,
     };
 
-    let mut mode = "3D"; 
-    let mut last_time = std::time::Instant::now();
-    let mut frame_count = 0;
-    let mut fps = 0.0;
-
+    let mut mode = "2D"; 
     while window.is_open(){
-
-        let current_time = std::time::Instant::now();
-        frame_count += 1;
-        if current_time.duration_since(last_time).as_secs_f32() >= 1.0 {
-            fps = frame_count as f32 / current_time.duration_since(last_time).as_secs_f32();
-            frame_count = 0;
-            last_time = current_time;
-        }
-
         //listen to inputs
         if window.is_key_down(Key::Escape){
             break;
@@ -187,10 +172,8 @@ fn main() {
         } else {
             render3d(&mut framebuffer, &player, &maze)
         }
-
-        window
-        .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
-        .unwrap();
+        // Actualizar la ventana con el buffer del framebuffer
+        window.update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height).unwrap();
 
         std::thread::sleep(frame_delay);
     }
