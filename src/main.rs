@@ -98,7 +98,6 @@ fn main() {
 
     let frame_delay = Duration::from_millis(0);
 
-    let maze = load_maze("./maze.txt");
 
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
@@ -115,6 +114,11 @@ fn main() {
 
     // initialize values
     framebuffer.set_background_color(0x333355);
+
+    window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+    window.set_cursor_visibility(false); // Ocultar el cursor
+
+    let maze = load_maze("./maze.txt");
 
     let mut player = Player{
         pos: Vec2::new(150.0, 150.0),
