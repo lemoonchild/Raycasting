@@ -55,3 +55,35 @@ pub fn cast_ray(
         d += 1.0; 
     }
 }
+
+pub fn cast_ray_minimap(framebuffer: &mut Framebuffer, maze: &Vec<Vec<char>>, player: &Player, angle: f32, block_size: usize, minimap_x: usize, minimap_y: usize, scale: f32) {
+    let mut d = 0.0;
+    let max_distance = 50.0; 
+
+    while d < max_distance {
+        let cos = d * angle.cos();
+        let sin = d * angle.sin();
+
+        let x = (player.pos.x + cos) as usize;
+        let y = (player.pos.y + sin) as usize;
+
+        // Ajusta las coordenadas para el minimapa
+        let mx = minimap_x + (x as f32 * scale) as usize;
+        let my = minimap_y + (y as f32 * scale) as usize;
+
+        if mx >= framebuffer.width || my >= framebuffer.height {
+            break; // Evita dibujar fuera de los límites del framebuffer
+        }
+
+        framebuffer.set_current_color(0xFFFFFF);
+        framebuffer.point(mx, my);
+
+        let i = x / block_size;
+        let j = y / block_size;
+        if maze.get(j).and_then(|row| row.get(i)) == Some(&'#') { // '#' representa un muro
+            break;
+        }
+        d += 1.0;
+    }
+}
+
