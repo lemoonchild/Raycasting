@@ -96,17 +96,27 @@ fn main() {
         fov: PI/3.0,
     };
 
+    let mut mode = "2D"; 
+
     while window.is_open(){
         //listen to inputs
         if window.is_key_down(Key::Escape){
             break;
+        }
+    
+        if window.is_key_down(Key::M){
+            mode = if mode == "2D" {"3D"} else {"2D"}; 
         }
 
         process_events(&window, &mut player);
 
         framebuffer.clear();
     
-        render2d(&mut framebuffer, &player);
+        if mode == "2D"{
+            render2d(&mut framebuffer, &player);
+        } else {
+            
+        }
 
         window
         .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
