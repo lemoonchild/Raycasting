@@ -22,9 +22,10 @@ mod splash_screen;
 
 mod audio;
 
-static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
-static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall3.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
+static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall.png")));
+static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
+static WALL2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall2.png")));
+static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door1.png")));
 
 
 fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
@@ -32,9 +33,9 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
     let default_color = 0x000000;
 
     match cell {
-        '+' => WALL1.get_pixel_color(tx, ty),
+        '+' => WALL.get_pixel_color(tx, ty),
         '-' => WALL1.get_pixel_color(tx, ty),
-        '|' => WALL1.get_pixel_color(tx, ty),
+        '|' => WALL2.get_pixel_color(tx, ty),
         'g' => DOOR.get_pixel_color(tx, ty),
         _ => default_color,
 
@@ -57,27 +58,6 @@ fn draw_cell(framebuffer: &mut Framebuffer, xo: usize, yo: usize, block_size: us
     }
 }
 
-fn render2d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>){
-    let block_size = 100; 
-
-    for row in 0..maze.len(){
-        for col in 0..maze[row].len(){
-            draw_cell(framebuffer, col * block_size, row * block_size, block_size, maze[row][col]);
-        }
-    }
-
-    framebuffer.set_current_color(0xFFFFFF);
-    framebuffer.point(player.pos.x as usize, player.pos.y as usize); 
-
-    let num_rays = 100; 
-
-    for i in 0..num_rays {
-        let current_ray = i as f32/ num_rays as f32; 
-        let a = player.a - (player.fov / 2.0) + (player.fov * current_ray); 
-        cast_ray(framebuffer, &maze, player, a, block_size, true); 
-    }
-}
-
 fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>){
 
     let block_size = 100; 
@@ -88,12 +68,12 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
     
     for i in 0..framebuffer.width {
-        framebuffer.set_current_color(0x383838);
+        framebuffer.set_current_color(0x74bfe6);
         for j in 0..(framebuffer.height / 2){
             framebuffer.point(i, j);
         }
     
-        framebuffer.set_current_color(0x717171);
+        framebuffer.set_current_color(0x8ca47e);
         for j in (framebuffer.height / 2)..framebuffer.height{
             framebuffer.point(i, j);
         }
