@@ -2,28 +2,29 @@ mod maze;
 mod framebuffer;
 mod player;
 use minifb::{Key, Window, WindowOptions};
-use core::{f32::consts::PI, num};
+use core::f32::consts::PI;
 use nalgebra_glm::Vec2;
 use player::{Player, process_events};
-use std::{os::windows::io::FromRawHandle, process::Termination, time::Duration};
+use std::time::Duration;
 use framebuffer::Framebuffer;
 use maze::load_maze;
-use rusttype::{Font, Scale};
-use image::{RgbaImage, Rgba};
 
 use once_cell::sync::Lazy;
 use std::sync::Arc; 
 
 mod caster;
-use caster::{cast_ray, cast_ray_minimap, Intersect};
+use caster::{cast_ray, cast_ray_minimap};
 
 mod texture;
 use texture::Texture;
 
-static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall.png")));
-static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
-static WALL2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall2.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
+mod splash_screen;
+
+mod audio;
+
+static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
+static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall3.png")));
+static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
 
 
 fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
@@ -31,9 +32,9 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
     let default_color = 0x000000;
 
     match cell {
-        '+' => WALL.get_pixel_color(tx, ty),
-        '-' => WALL.get_pixel_color(tx, ty),
-        '|' => WALL.get_pixel_color(tx, ty),
+        '+' => WALL1.get_pixel_color(tx, ty),
+        '-' => WALL1.get_pixel_color(tx, ty),
+        '|' => WALL1.get_pixel_color(tx, ty),
         'g' => DOOR.get_pixel_color(tx, ty),
         _ => default_color,
 
@@ -43,7 +44,7 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
 fn draw_cell(framebuffer: &mut Framebuffer, xo: usize, yo: usize, block_size: usize, cell: char) {
     let color = match cell {
         '+'  | '|' => WALL1.get_pixel_color(0, 0),  
-        '-' => WALL2.get_pixel_color(0, 0),
+        '-' => DOOR.get_pixel_color(0, 0),
         'g' => 0xFF0000,                                
         _ => 0x717171,                                  
     };
@@ -150,6 +151,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
 
 
 fn main() {
+
     let window_width = 1300;
     let window_height = 900;
 
@@ -160,8 +162,12 @@ fn main() {
 
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
+
+    audio::play_background_music(); 
+    splash_screen::show_splash_screen("src\\assets\\welcome1.png");
+
     let mut window = Window::new(
-        "Rust Graphics - Maze Example",
+        "Rust Graphics - Cat Maze",
         window_width,
         window_height,
         WindowOptions::default(),
@@ -180,11 +186,9 @@ fn main() {
 
     let mut player = Player{
         pos: Vec2::new(150.0, 150.0),
-        a: PI/1.8, 
+        a: PI/1.3, 
         fov: PI/4.0,
     };
-
-    let mut mode = "3D"; 
 
     let minimap_scale = 0.2;
     let minimap_width = (framebuffer.width as f32 * minimap_scale) as usize;
@@ -197,20 +201,14 @@ fn main() {
         if window.is_key_down(Key::Escape){
             break;
         }
-    
-        if window.is_key_down(Key::M){
-            mode = if mode == "2D" {"3D"} else {"2D"}; 
-        }
 
         process_events(&window, &mut player, &maze);
 
         framebuffer.clear();
     
-        if mode == "2D"{
-            render2d(&mut framebuffer, &player, &maze);
-        } else {
-            render3d(&mut framebuffer, &player, &maze)
-        }
+
+        render3d(&mut framebuffer, &player, &maze); 
+        
 
         render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale);
 
