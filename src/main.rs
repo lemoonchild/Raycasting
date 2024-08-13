@@ -1,11 +1,13 @@
 mod maze;
 mod framebuffer;
 mod player;
+use image::Frame;
 use minifb::{Key, Window, WindowOptions};
+use rodio::StreamError;
 use core::f32::consts::PI;
-use nalgebra_glm::Vec2;
+use nalgebra_glm::{sqrt, Vec2, distance};
 use player::{Player, process_events};
-use std::time::Duration;
+use std::{path::MAIN_SEPARATOR, time::Duration};
 use framebuffer::Framebuffer;
 use maze::load_maze;
 
@@ -22,10 +24,16 @@ mod splash_screen;
 
 mod audio;
 
+mod collectible;
+use collectible::Collectible; 
+
 static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall.png")));
 static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
-static WALL2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall2.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door1.png")));
+static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
+static CAT: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\cat.png")));
+static FISH1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish.png")));
+static FISH2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish2.png")));
+
 
 
 fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
@@ -33,9 +41,9 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
     let default_color = 0x000000;
 
     match cell {
-        '+' => WALL.get_pixel_color(tx, ty),
-        '-' => WALL1.get_pixel_color(tx, ty),
-        '|' => WALL2.get_pixel_color(tx, ty),
+        '+' => WALL1.get_pixel_color(tx, ty),
+        '-' => WALL.get_pixel_color(tx, ty),
+        '|' => WALL1.get_pixel_color(tx, ty),
         'g' => DOOR.get_pixel_color(tx, ty),
         _ => default_color,
 
@@ -58,7 +66,7 @@ fn draw_cell(framebuffer: &mut Framebuffer, xo: usize, yo: usize, block_size: us
     }
 }
 
-fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>){
+fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>, z_buffer: &mut [f32]){
 
     let block_size = 100; 
 
@@ -68,12 +76,12 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
     
     for i in 0..framebuffer.width {
-        framebuffer.set_current_color(0x74bfe6);
+        framebuffer.set_current_color(0x818a6b);
         for j in 0..(framebuffer.height / 2){
             framebuffer.point(i, j);
         }
     
-        framebuffer.set_current_color(0x8ca47e);
+        framebuffer.set_current_color(0x182d10);
         for j in (framebuffer.height / 2)..framebuffer.height{
             framebuffer.point(i, j);
         }
@@ -87,10 +95,12 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
         let distance = intersect.distance * (a - player.a).cos();
 
-        let stake_height = (framebuffer.height as f32 / distance) * 50.0; 
+        let stake_height = (framebuffer.height as f32 / distance) * 80.0; 
 
         let stake_top = (hh - (stake_height / 2.0 )) as usize; 
         let stake_bottom = (hh + (stake_height / 2.0 )) as usize;
+
+        z_buffer[i] = distance;
 
         for y in stake_top..stake_bottom{
             let ty = (y as f32- stake_top as f32) / (stake_bottom  as f32 - stake_top as f32) * 128.0;
@@ -104,9 +114,92 @@ fn render3d(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>
 
 }
 
-fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>, minimap_x: usize, minimap_y: usize, minimap_scale: f32) {
+fn render_enemy(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2, z_buffer: &mut [f32]) {
+    // player_a
+    let sprite_a = ((pos.y - player.pos.y).atan2(pos.x - player.pos.x) - player.a + PI) % (2.0 * PI) - PI;
+    if sprite_a.abs() > player.fov / 2.0 {
+      return;
+    }
+    
+    let sprite_d = ((player.pos.x - pos.x).powi(2) + (player.pos.y - pos.y).powi(2)).sqrt();
+    // let sprite_d = distance(player.pos, pos);
+  
+    if sprite_d < 10.0 {
+      return;
+    }
+  
+    let screen_height = framebuffer.height as f32;
+    let screen_width = framebuffer.width as f32;
+  
+    let sprite_size = (screen_height / sprite_d) * 100.0;
+    let start_x = (sprite_a - player.a) * (screen_height / player.fov) + (screen_width / 2.0) - (sprite_size / 2.0);
+    let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
+  
+    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width);
+    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height);
+    let start_x = start_x.max(0.0) as usize;
+    let start_y = start_y.max(0.0) as usize;
+  
+    if end_x <= 0 {
+      return;
+    }
+  
+    if start_x < framebuffer.width && sprite_d < z_buffer[start_x] {
+      for x in start_x..(end_x - 1) {
+        for y in start_y..(end_y - 1) {
+          let tx = ((x - start_x) * 128 / sprite_size as usize) as u32;
+          let ty = ((y - start_y) * 128 / sprite_size as usize) as u32;
+          let color = CAT.get_pixel_color(tx, ty);
+          if color != 0x443935 { 
+            framebuffer.set_current_color(color);
+            framebuffer.point(x, y);
+          }
+          z_buffer[x] = sprite_d;
+        }
+      }
+    }
+}
+  
+fn render_enemies(framebuffer: &mut Framebuffer, player: &Player, z_buffer: &mut [f32]) {
+    let enemies = vec![
+      Vec2::new(250.0, 250.0),
+      Vec2::new(550.0, 550.0),
+    ];  
+  
+    for enemy in &enemies {
+      render_enemy(framebuffer, &player, enemy, z_buffer);
+    }
+}
+
+fn initialize_collectibles() -> Vec<Collectible> {
+    vec![
+        Collectible::new(450.0, 450.0, FISH1.clone()),
+        Collectible::new(300.0, 300.0, FISH2.clone()),
+    ]
+}
+
+fn render_collectibles(framebuffer: &mut Framebuffer, collectibles: &[Collectible]) {
+    for collectible in collectibles {
+        if !collectible.collected {
+            let x = collectible.position.x as usize;
+            let y = collectible.position.y as usize;
+            if x < framebuffer.width && y < framebuffer.height {
+                let color = collectible.texture.get_pixel_color(0, 0); 
+                framebuffer.set_current_color(color);
+                for dx in 0..10 {
+                    for dy in 0..10 {
+                        framebuffer.point(x + dx, y + dy);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>, minimap_x: usize, minimap_y: usize, minimap_scale: f32, collectibles: &[Collectible], enemies: &[Vec2]) {
     let block_size = (100.0 * minimap_scale) as usize; 
 
+    // Dibujar el laberinto
     for row in 0..maze.len() {
         for col in 0..maze[row].len() {
             let cell = maze[row][col];
@@ -116,11 +209,31 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
         }
     }
 
+    // Dibujar al jugador
     let player_x = minimap_x + (player.pos.x as f32 * minimap_scale) as usize;
     let player_y = minimap_y + (player.pos.y as f32 * minimap_scale) as usize;
-    framebuffer.set_current_color(0xFF0000);
+    framebuffer.set_current_color(0xFF0000);  // Rojo para el jugador
     framebuffer.point(player_x, player_y);
 
+    // Dibujar los coleccionables
+    for collectible in collectibles {
+        if !collectible.collected {
+            let collectible_x = minimap_x + (collectible.position.x as f32 * minimap_scale) as usize;
+            let collectible_y = minimap_y + (collectible.position.y as f32 * minimap_scale) as usize;
+            framebuffer.set_current_color(0x00FF00);  // Verde para los coleccionables
+            framebuffer.point(collectible_x, collectible_y);
+        }
+    }
+
+    // Dibujar enemigos
+    for enemy in enemies {
+        let enemy_x = minimap_x + (enemy.x * minimap_scale) as usize;
+        let enemy_y = minimap_y + (enemy.y * minimap_scale) as usize;
+        println!("Dibujando enemigo en: ({}, {})", enemy_x, enemy_y);  // Agrega esta línea para depuración
+        framebuffer.set_current_color(0xFFFFFF);  // Blanco para los enemigos
+        framebuffer.point(enemy_x, enemy_y);
+    }
+    
     let num_rays = 50;
     for i in 0..num_rays {
         let current_ray = i as f32 / num_rays as f32;
@@ -176,21 +289,31 @@ fn main() {
     let minimap_x = framebuffer.width - minimap_width - 20;
     let minimap_y = framebuffer.height - minimap_height - 20;
 
+    let mut collectibles = initialize_collectibles();
+
+    let enemies = vec![
+    Vec2::new(250.0, 250.0),  
+    Vec2::new(550.0, 550.0),
+];
+
     while window.is_open(){
         //listen to inputs
         if window.is_key_down(Key::Escape){
             break;
         }
 
-        process_events(&window, &mut player, &maze);
+        process_events(&window, &mut player, &maze, &mut collectibles);
 
         framebuffer.clear();
     
 
-        render3d(&mut framebuffer, &player, &maze); 
-        
+        let mut z_buffer = vec![f32::INFINITY; framebuffer.width]; 
 
-        render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale);
+        render3d(&mut framebuffer, &player, &maze, &mut z_buffer); 
+        render_enemies(&mut framebuffer, &player, &mut z_buffer);
+        render_collectibles(&mut framebuffer, &collectibles);
+
+        render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
 
         // Actualizar la ventana con el buffer del framebuffer
         window.update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height).unwrap();
