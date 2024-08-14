@@ -2,12 +2,12 @@ use minifb::{Window, Key, MouseMode};
 use nalgebra_glm::{Vec2, rotate_vec2};
 use std::f32::consts::PI;
 use crate::maze::is_wall;
-use crate::Collectible;
 
 pub struct Player {
     pub pos: Vec2,
     pub a: f32, // Ángulo de visión
     pub fov: f32, // Campo de visión
+    pub total_fishes: u32,
 }
 
 static mut LAST_MOUSE_X: f32 = 0.0; // Variable global para almacenar la última posición del mouse

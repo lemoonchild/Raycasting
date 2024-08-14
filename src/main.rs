@@ -1,13 +1,11 @@
 mod maze;
 mod framebuffer;
 mod player;
-use image::Frame;
 use minifb::{Key, Window, WindowOptions};
-use rodio::StreamError;
 use core::f32::consts::PI;
-use nalgebra_glm::{sqrt, Vec2, distance};
+use nalgebra_glm::{Vec2, distance};
 use player::{Player, process_events};
-use std::{path::MAIN_SEPARATOR, time::Duration};
+use std::time::Duration;
 use framebuffer::Framebuffer;
 use maze::load_maze;
 
@@ -27,12 +25,15 @@ mod audio;
 mod collectible;
 use collectible::Collectible; 
 
+mod textrender;
+use textrender::TextRenderer; 
+use std::time::Instant;
+
 static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall.png")));
 static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
 static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
 static CAT: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\cat.png")));
 static FISH1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish.png")));
-static FISH2: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish1.png")));
 
 
 
@@ -174,7 +175,13 @@ fn render_enemies(framebuffer: &mut Framebuffer, player: &Player, enemies: &[Vec
     }
 }
 
-fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2, z_buffer: &mut [f32]) {
+fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, collectible: &Collectible, z_buffer: &mut [f32]) {
+
+    if collectible.collected {
+        return;  // No renderizar si ya fue recolectado
+    }
+
+    let pos = &collectible.position;
     let sprite_a = (pos.y - player.pos.y).atan2(pos.x - player.pos.x);
     let relative_angle = sprite_a - player.a;
 
@@ -201,7 +208,7 @@ fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2
     let screen_height = framebuffer.height as f32;
     let screen_width = framebuffer.width as f32;
 
-    let sprite_size = (screen_height / sprite_d) * 50.0;
+    let sprite_size = (screen_height / sprite_d) * 20.0;
     let start_x = (screen_width / 2.0) + (relative_angle * (screen_width / player.fov)) - (sprite_size / 2.0);
     let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
 
@@ -217,7 +224,7 @@ fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2
                 let ty = ((y - start_y) * 128 / sprite_size as usize) as u32;
                 
                 let color = FISH1.get_pixel_color(tx, ty);
-                if color != 0x443935 { 
+                if color != 0x6598b3 { 
                   framebuffer.set_current_color(color);
                   framebuffer.point(x, y);
 
@@ -228,13 +235,24 @@ fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2
     }
 }
 
-fn render_collectibles(framebuffer: &mut Framebuffer, player: &Player, enemies: &[Vec2], z_buffer: &mut [f32]) {
-    for collectible in enemies {
+fn render_collectibles(framebuffer: &mut Framebuffer, player: &Player, collectibles: &[Collectible], z_buffer: &mut [f32]) {
+    for collectible in collectibles {
         render_collectible(framebuffer, player, collectible, z_buffer);
     }
 }
 
-fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>, minimap_x: usize, minimap_y: usize, minimap_scale: f32, collectibles: &[Vec2], enemies: &[Vec2]) {
+fn update_collectibles(player: &mut Player, collectibles: &mut Vec<Collectible>) {
+    let capture_distance = 10.0; // Establece la distancia a la que un pescado puede ser "capturado"
+
+    for collectible in collectibles.iter_mut() {
+        if !collectible.collected && nalgebra_glm::distance(&player.pos, &collectible.position) < capture_distance {
+            collectible.collected = true;
+            player.total_fishes += 1;  // Incrementa el contador de pescados del jugador
+        }
+    }
+}
+
+fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec<char>>, minimap_x: usize, minimap_y: usize, minimap_scale: f32, collectibles: &[Collectible], enemies: &[Vec2]) {
     let block_size = (100.0 * minimap_scale) as usize; 
 
     // Dibujar el laberinto
@@ -255,12 +273,14 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
 
     // Dibujar los coleccionables
     for collectible in collectibles {
-        let collectible_x = minimap_x + (collectible.x * minimap_scale) as usize;
-        let collectible_y = minimap_y + (collectible.y * minimap_scale) as usize;
-        framebuffer.set_current_color(0xFF0000);  
-        framebuffer.point(collectible_x, collectible_y);
+        if !collectible.collected {
+            let collectible_x = minimap_x + (collectible.position.x * minimap_scale) as usize;
+            let collectible_y = minimap_y + (collectible.position.y * minimap_scale) as usize;
+            framebuffer.set_current_color(0xFF0000);
+            framebuffer.point(collectible_x, collectible_y);
+        }
     }
-    
+
     // Dibujar enemigos
     for enemy in enemies {
         let enemy_x = minimap_x + (enemy.x * minimap_scale) as usize;
@@ -279,6 +299,10 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
 
 
 fn main() {
+    
+
+    let font_data = std::fs::read("src\\assets\\fonts\\Montserrat-Medium.ttf").expect("failed to read font file");
+    let text_renderer = TextRenderer::new(&font_data, 24.0);  // Ajusta el tamaño según necesites
 
     let window_width = 1300;
     let window_height = 900;
@@ -286,7 +310,7 @@ fn main() {
     let framebuffer_width = 1300;
     let framebuffer_height = 900;
 
-    let frame_delay = Duration::from_millis(0);
+    let frame_delay = Duration::from_millis(16);
 
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
@@ -295,11 +319,13 @@ fn main() {
     splash_screen::show_splash_screen("src\\assets\\welcome1.png");
 
     let mut window = Window::new(
-        "Rust Graphics - Cat Maze",
+        "Rust Graphics - FEED THE CAT",
         window_width,
         window_height,
         WindowOptions::default(),
     ).unwrap();
+
+    let mut last_frame_time = Instant::now();
 
     // move the window around
     window.set_position(100, 100);
@@ -316,6 +342,7 @@ fn main() {
         pos: Vec2::new(150.0, 150.0),
         a: PI/1.3, 
         fov: PI/4.0,
+        total_fishes: 0, 
     };
 
     let minimap_scale = 0.2;
@@ -329,10 +356,13 @@ fn main() {
         Vec2::new(400.0, 400.0),
     ];
 
-    let collectibles = vec![
-        Vec2::new(500.0, 500.0),  
-        Vec2::new(400.0, 400.0),
+    let mut collectibles: Vec<Collectible> = vec![
+        Collectible::new(500.0, 500.0, Arc::clone(&FISH1)),
+        Collectible::new(250.0, 250.0, Arc::clone(&FISH1)),
+        Collectible::new(600.0, 600.0, Arc::clone(&FISH1)),
+        Collectible::new(350.0, 350.0, Arc::clone(&FISH1)),
     ];
+    
 
     while window.is_open(){
         //listen to inputs
@@ -340,7 +370,20 @@ fn main() {
             break;
         }
 
+        let now = Instant::now();
+        let delta_time = now.duration_since(last_frame_time);
+
+        last_frame_time = now;
+        let fps = 1.0 / delta_time.as_secs_f32();
+        let fps_text = format!("FPS: {:.2}", fps);
+        let pescados_text = format!("Pescados capturados: {}/4", player.total_fishes);
+        text_renderer.render_text(&mut framebuffer, &pescados_text, 20.0, 20.0, 0xFFFFFF);
+    
+    
+        let width = framebuffer.width;
+
         process_events(&window, &mut player, &maze);
+        update_collectibles(&mut player, &mut collectibles); // Verifica y actualiza el estado de los pescados
 
         framebuffer.clear();
     
@@ -352,9 +395,11 @@ fn main() {
         render_collectibles(&mut framebuffer, &player, &collectibles, &mut z_buffer);
 
         render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
+        text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
+        text_renderer.render_text(&mut framebuffer, &pescados_text, 20.0, 20.0, 0xFFFFFF);
 
         // Actualizar la ventana con el buffer del framebuffer
-        window.update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height).unwrap();
+        window.update_with_buffer(&framebuffer.buffer, framebuffer.width, framebuffer.height).unwrap();
 
         std::thread::sleep(frame_delay);
     }
