@@ -12,7 +12,7 @@ pub struct Player {
 
 static mut LAST_MOUSE_X: f32 = 0.0; // Variable global para almacenar la última posición del mouse
 
-pub fn process_events(window: &Window, player: &mut Player, maze: &Vec<Vec<char>>, collectibles: &mut Vec<Collectible>) {
+pub fn process_events(window: &Window, player: &mut Player, maze: &Vec<Vec<char>>) {
     const MOVE_SPEED: f32 = 10.0;
     const ROTATION_SPEED: f32 = 0.005;
     const STRAFE_SPEED: f32 = 10.0;
@@ -63,11 +63,4 @@ pub fn process_events(window: &Window, player: &mut Player, maze: &Vec<Vec<char>
         player.pos.y = strafe_left_y;
     }
 
-    let player_pos = player.pos;
-    for collectible in collectibles.iter_mut() {
-        if !collectible.collected && nalgebra_glm::distance(&player_pos, &collectible.position) < 10.0 {
-            collectible.collected = true;
-            // Aquí puedes añadir lógica para efectos de sonido, incrementar puntuación, etc.
-        }
-    }
 }
