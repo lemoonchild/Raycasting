@@ -7,7 +7,8 @@ pub struct Player {
     pub pos: Vec2,
     pub a: f32, // Ángulo de visión
     pub fov: f32, // Campo de visión
-    pub total_fishes: u32,
+    pub total_fishes: u32, // fishes captured
+    pub key_rendered: bool,
 }
 
 static mut LAST_MOUSE_X: f32 = 0.0; // Variable global para almacenar la última posición del mouse

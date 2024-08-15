@@ -34,7 +34,7 @@ static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\ass
 static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
 static CAT: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\cat.png")));
 static FISH1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish.png")));
-
+static KEY: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\key.png")));
 
 
 fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
@@ -178,14 +178,13 @@ fn render_enemies(framebuffer: &mut Framebuffer, player: &Player, enemies: &[Vec
 fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, collectible: &Collectible, z_buffer: &mut [f32]) {
 
     if collectible.collected {
-        return;  // No renderizar si ya fue recolectado
+        return;  
     }
 
     let pos = &collectible.position;
     let sprite_a = (pos.y - player.pos.y).atan2(pos.x - player.pos.x);
     let relative_angle = sprite_a - player.a;
 
-    // Ajuste del ángulo relativo para mantenerlo dentro de -PI a PI
     let relative_angle = if relative_angle > PI {
         relative_angle - 2.0 * PI
     } else if relative_angle < -PI {
@@ -194,7 +193,6 @@ fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, collectibl
         relative_angle
     };
 
-    // Verificar si el sprite está dentro del campo de visión
     if relative_angle.abs() > player.fov / 2.0 {
         return;
     }
@@ -242,12 +240,69 @@ fn render_collectibles(framebuffer: &mut Framebuffer, player: &Player, collectib
 }
 
 fn update_collectibles(player: &mut Player, collectibles: &mut Vec<Collectible>) {
-    let capture_distance = 10.0; // Establece la distancia a la que un pescado puede ser "capturado"
+    let capture_distance = 10.0; 
 
     for collectible in collectibles.iter_mut() {
         if !collectible.collected && nalgebra_glm::distance(&player.pos, &collectible.position) < capture_distance {
             collectible.collected = true;
-            player.total_fishes += 1;  // Incrementa el contador de pescados del jugador
+            player.total_fishes += 1;
+        }
+    }
+}
+
+fn render_key(framebuffer: &mut Framebuffer, player: &Player, key_position: &Vec2, z_buffer: &mut [f32], texture: &Arc<Texture>, is_rendered: bool) {
+    if !is_rendered {
+        return;
+    }
+
+    let sprite_a = (key_position.y - player.pos.y).atan2(key_position.x - player.pos.x);
+    let relative_angle = sprite_a - player.a;
+
+    // Ajuste del ángulo relativo para mantenerlo dentro de -PI a PI
+    let relative_angle = if relative_angle > PI {
+        relative_angle - 2.0 * PI
+    } else if relative_angle < -PI {
+        relative_angle + 2.0 * PI
+    } else {
+        relative_angle
+    };
+
+    // Verificar si el sprite está dentro del campo de visión
+    if relative_angle.abs() > player.fov / 2.0 {
+        return;
+    }
+
+    let sprite_d = distance(&player.pos, key_position);
+
+    if sprite_d < 10.0 {
+        return;
+    }
+
+    let screen_height = framebuffer.height as f32;
+    let screen_width = framebuffer.width as f32;
+
+    let sprite_size = (screen_height / sprite_d) * 40.0;
+    let start_x = (screen_width / 2.0) + (relative_angle * (screen_width / player.fov)) - (sprite_size / 2.0);
+    let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
+
+    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width);
+    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height);
+    let start_x = start_x.max(0.0) as usize;
+    let start_y = start_y.max(0.0) as usize;
+
+    if start_x < framebuffer.width && sprite_d < z_buffer[start_x] {
+        for x in start_x..end_x {
+            for y in start_y..end_y {
+                let tx = ((x - start_x) * 128 / sprite_size as usize) as u32;
+                let ty = ((y - start_y) * 128 / sprite_size as usize) as u32;
+                
+                let color = texture.get_pixel_color(tx, ty);
+                if color != 0xFFFFFF {  // Asume que el color blanco es transparente, ajusta según tu textura
+                    framebuffer.set_current_color(color);
+                    framebuffer.point(x, y);
+                }
+                z_buffer[x] = sprite_d;
+            }
         }
     }
 }
@@ -268,7 +323,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     // Dibujar al jugador
     let player_x = minimap_x + (player.pos.x as f32 * minimap_scale) as usize;
     let player_y = minimap_y + (player.pos.y as f32 * minimap_scale) as usize;
-    framebuffer.set_current_color(0xFF0000);  
+    framebuffer.set_current_color(0xFFFFFF);  
     framebuffer.point(player_x, player_y);
 
     // Dibujar los coleccionables
@@ -276,7 +331,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
         if !collectible.collected {
             let collectible_x = minimap_x + (collectible.position.x * minimap_scale) as usize;
             let collectible_y = minimap_y + (collectible.position.y * minimap_scale) as usize;
-            framebuffer.set_current_color(0xFF0000);
+            framebuffer.set_current_color(0xFFFFFF);
             framebuffer.point(collectible_x, collectible_y);
         }
     }
@@ -285,7 +340,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     for enemy in enemies {
         let enemy_x = minimap_x + (enemy.x * minimap_scale) as usize;
         let enemy_y = minimap_y + (enemy.y * minimap_scale) as usize;
-        framebuffer.set_current_color(0xFFFFFF);  
+        framebuffer.set_current_color(0xFF0000);  
         framebuffer.point(enemy_x, enemy_y);
     }
     
@@ -338,12 +393,15 @@ fn main() {
 
     let maze = load_maze("./maze.txt");
 
-    let mut player = Player{
+    let key_position = Vec2::new(791.0, 250.0);  // Posición fija para la llave
+
+    let mut player = Player {
         pos: Vec2::new(150.0, 150.0),
-        a: PI/1.3, 
+        a: PI/1.3,
         fov: PI/4.0,
-        total_fishes: 0, 
-    };
+        total_fishes: 0,
+        key_rendered: false,
+    };    
 
     let minimap_scale = 0.2;
     let minimap_width = (framebuffer.width as f32 * minimap_scale) as usize;
@@ -353,14 +411,17 @@ fn main() {
 
     let enemies = vec![
         Vec2::new(260.0, 260.0),  
-        Vec2::new(400.0, 400.0),
+        Vec2::new(178.0, 717.0),
+        Vec2::new(1008.0, 155.0),
+        Vec2::new(480.0, 329.0),
+        Vec2::new(1096.0, 558.0),
     ];
 
     let mut collectibles: Vec<Collectible> = vec![
-        Collectible::new(500.0, 500.0, Arc::clone(&FISH1)),
-        Collectible::new(250.0, 250.0, Arc::clone(&FISH1)),
-        Collectible::new(600.0, 600.0, Arc::clone(&FISH1)),
-        Collectible::new(350.0, 350.0, Arc::clone(&FISH1)),
+        Collectible::new(691.40, 753.22, Arc::clone(&FISH1)),
+        Collectible::new(656.10, 164.82, Arc::clone(&FISH1)),
+        Collectible::new(1107.38, 239.40, Arc::clone(&FISH1)),
+        Collectible::new(833.94, 515.87, Arc::clone(&FISH1)),
     ];
     
 
@@ -383,11 +444,14 @@ fn main() {
         let width = framebuffer.width;
 
         process_events(&window, &mut player, &maze);
-        update_collectibles(&mut player, &mut collectibles); // Verifica y actualiza el estado de los pescados
-
+        update_collectibles(&mut player, &mut collectibles);
+        if player.total_fishes == collectibles.len() as u32 && !player.key_rendered {
+            player.key_rendered = true;
+        }
+    
+        
         framebuffer.clear();
     
-
         let mut z_buffer = vec![f32::INFINITY; framebuffer.width]; 
 
         render3d(&mut framebuffer, &player, &maze, &mut z_buffer); 
@@ -398,6 +462,14 @@ fn main() {
         text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
         text_renderer.render_text(&mut framebuffer, &pescados_text, 20.0, 20.0, 0xFFFFFF);
 
+        if player.key_rendered {
+            let key_position = Vec2::new(791.0, 250.0);  
+            render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
+            println!("Key is now rendered.");
+            let message = "¡Has alimentado al gato! Recolecta al ratón para pasar de nivel";
+            text_renderer.render_text(&mut framebuffer, &message, 600.0, 100.0, 0xFFFFFF);
+        }
+        
         // Actualizar la ventana con el buffer del framebuffer
         window.update_with_buffer(&framebuffer.buffer, framebuffer.width, framebuffer.height).unwrap();
 
