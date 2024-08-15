@@ -1,13 +1,17 @@
 mod maze;
+use maze::load_maze;
+
 mod framebuffer;
+use framebuffer::Framebuffer;
+
 mod player;
+use player::{Player, process_events};
+
 use minifb::{Key, Window, WindowOptions};
 use core::f32::consts::PI;
+
 use nalgebra_glm::{Vec2, distance};
-use player::{Player, process_events};
 use std::time::Duration;
-use framebuffer::Framebuffer;
-use maze::load_maze;
 
 use once_cell::sync::Lazy;
 use std::sync::Arc; 
@@ -27,11 +31,14 @@ use collectible::Collectible;
 
 mod textrender;
 use textrender::TextRenderer; 
+
 use std::time::Instant;
 
-static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall.png")));
-static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\wall1.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\door.png")));
+
+// Imagenes del juego
+static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\wall.png")));
+static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\wall1.png")));
+static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\door.png")));
 static CAT: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\cat.png")));
 static FISH1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish.png")));
 static KEY: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\key.png")));
@@ -391,9 +398,10 @@ fn main() {
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
     let key_position = Vec2::new(791.0, 250.0);  // Posición fija para la llave
+    let door_position = Vec2::new(1133.00, 696.00); // Posición de la puerta
 
     audio::play_background_music(); 
-    splash_screen::show_splash_screen("src\\assets\\welcome1.png");
+    splash_screen::show_splash_screen("src\\assets\\screens\\welcome1.png");
 
     let mut window = Window::new(
         "Rust Graphics - FEED THE CAT",
@@ -494,6 +502,15 @@ fn main() {
             render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
         }
         
+        if player.key_collected && nalgebra_glm::distance(&player.pos, &door_position) < 10.0 {
+            // Mostrar pantalla de victoria o terminar el juego
+            splash_screen::show_splash_screen("src\\assets\\screens\\win.png");
+            break; // Salir del bucle para terminar el juego
+        }
+
+        println!("Posición del jugador: x = {}, y = {}", player.pos.x, player.pos.y);
+
+
         // Actualizar la ventana con el buffer del framebuffer
         window.update_with_buffer(&framebuffer.buffer, framebuffer.width, framebuffer.height).unwrap();
 

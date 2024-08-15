@@ -13,10 +13,10 @@ pub fn load_maze(filename: &str) -> Vec<Vec<char>> {
 }
 
 pub fn is_wall(maze: &Vec<Vec<char>>, x: usize, y: usize) -> bool {
-    let i = x / 100; // Asumiendo un tamaño de bloque de 100 como en tu función draw_cell
+    let i = x / 100; 
     let j = y / 100;
     if j >= maze.len() || i >= maze[j].len() {
-        return true; // Tratar fuera de los límites como paredes
+        return true; 
     }
     maze[j][i] != ' '
 }

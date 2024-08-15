@@ -23,7 +23,7 @@ pub fn load_image_to_buffer(image_path: &str) -> (Vec<u32>, u32, u32) {
 pub fn show_splash_screen(image_path: &str) {
     let (buffer, width, height) = load_image_to_buffer(image_path);
     let mut window = Window::new(
-        "FEED THE CAT - Press S to start",
+        "FEED THE CAT",
         width as usize,
         height as usize,
         WindowOptions::default(),
