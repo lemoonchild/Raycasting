@@ -352,9 +352,30 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     }
 }
 
+fn update_game_state(player: &mut Player, collectibles: &mut Vec<Collectible>, key_position: &Vec2) {
+    let capture_distance = 10.0;
+
+    // Actualizar coleccionables
+    for collectible in collectibles.iter_mut() {
+        if !collectible.collected && nalgebra_glm::distance(&player.pos, &collectible.position) < capture_distance {
+            collectible.collected = true;
+            player.total_fishes += 1;
+        }
+    }
+
+    // Chequear si todos los pescados han sido recolectados para renderizar la llave
+    if player.total_fishes == collectibles.len() as u32 {
+        player.key_rendered = true;
+    }
+
+    // Recolectar la llave si el jugador está cerca y la llave está renderizada
+    if player.key_rendered && nalgebra_glm::distance(&player.pos, key_position) < capture_distance {
+        player.key_collected = true;
+        player.key_rendered = false; // Opcional: Ocultar la llave una vez recolectada
+    }
+}
 
 fn main() {
-    
 
     let font_data = std::fs::read("src\\assets\\fonts\\Montserrat-Medium.ttf").expect("failed to read font file");
     let text_renderer = TextRenderer::new(&font_data, 24.0);  // Ajusta el tamaño según necesites
@@ -369,6 +390,7 @@ fn main() {
 
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
+    let key_position = Vec2::new(791.0, 250.0);  // Posición fija para la llave
 
     audio::play_background_music(); 
     splash_screen::show_splash_screen("src\\assets\\welcome1.png");
@@ -393,14 +415,13 @@ fn main() {
 
     let maze = load_maze("./maze.txt");
 
-    let key_position = Vec2::new(791.0, 250.0);  // Posición fija para la llave
-
     let mut player = Player {
         pos: Vec2::new(150.0, 150.0),
         a: PI/1.3,
         fov: PI/4.0,
         total_fishes: 0,
         key_rendered: false,
+        key_collected: false, 
     };    
 
     let minimap_scale = 0.2;
@@ -437,18 +458,12 @@ fn main() {
         last_frame_time = now;
         let fps = 1.0 / delta_time.as_secs_f32();
         let fps_text = format!("FPS: {:.2}", fps);
-        let pescados_text = format!("Pescados capturados: {}/4", player.total_fishes);
-        text_renderer.render_text(&mut framebuffer, &pescados_text, 20.0, 20.0, 0xFFFFFF);
     
     
         let width = framebuffer.width;
 
         process_events(&window, &mut player, &maze);
         update_collectibles(&mut player, &mut collectibles);
-        if player.total_fishes == collectibles.len() as u32 && !player.key_rendered {
-            player.key_rendered = true;
-        }
-    
         
         framebuffer.clear();
     
@@ -460,14 +475,23 @@ fn main() {
 
         render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
         text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
-        text_renderer.render_text(&mut framebuffer, &pescados_text, 20.0, 20.0, 0xFFFFFF);
 
-        if player.key_rendered {
+
+        update_game_state(&mut player, &mut collectibles, &key_position);
+
+        let fish_text = format!("Pescados capturados: {}/4", player.total_fishes);
+        text_renderer.render_text(&mut framebuffer, &fish_text, 20.0, 20.0, 0xFFFFFF);
+    
+        if player.key_collected {
+            let key_text = "Llaves recolectadas: 1/1";
+            text_renderer.render_text(&mut framebuffer, key_text, 20.0, 40.0, 0xFFFFFF);
+            let action_text = "¡Llave recolectada! Dirígete a la puerta.";
+            text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
+        } else if player.key_rendered {
+            let action_text = "¡Has alimentado al gato! Recolecta la llave para pasar de nivel.";
+            text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
             let key_position = Vec2::new(791.0, 250.0);  
             render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
-            println!("Key is now rendered.");
-            let message = "¡Has alimentado al gato! Recolecta al ratón para pasar de nivel";
-            text_renderer.render_text(&mut framebuffer, &message, 600.0, 100.0, 0xFFFFFF);
         }
         
         // Actualizar la ventana con el buffer del framebuffer
