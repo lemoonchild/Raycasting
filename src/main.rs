@@ -8,7 +8,7 @@ mod player;
 use player::Player;
 
 use minifb::{Key, Window, WindowOptions};
-use splash_screen::{ show_start_screen, show_end_screen } ;
+use splash_screen:: show_start_screen  ;
 use core::f32::consts::PI;
 
 use nalgebra_glm::{Vec2, distance};
@@ -35,13 +35,12 @@ use textrender::TextRenderer;
 
 use std::time::Instant;
 
-use gilrs::{Gilrs, Event, Button, Axis, EventType};
+use gilrs::Gilrs;
 
 
 // Imagenes del juego
 static WALL: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\wall.png")));
 static WALL1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\wall1.png")));
-static DOOR: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\walls\\door.png")));
 static CAT: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\cat.png")));
 static FISH1: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\fish.png")));
 static KEY: Lazy<Arc<Texture>> = Lazy::new(||  Arc::new(Texture::new("src\\assets\\key.png")));
@@ -55,7 +54,7 @@ fn cell_to_texture_color(cell: char, tx: u32, ty: u32) -> u32 {
         '+' => WALL1.get_pixel_color(tx, ty),
         '-' => WALL.get_pixel_color(tx, ty),
         '|' => WALL1.get_pixel_color(tx, ty),
-        'g' => DOOR.get_pixel_color(tx, ty),
+        'g' => WALL.get_pixel_color(tx, ty),
         _ => default_color,
 
     }
@@ -65,7 +64,7 @@ fn draw_cell(framebuffer: &mut Framebuffer, xo: usize, yo: usize, block_size: us
     let color = match cell {
         '+'  | '|' => WALL1.get_pixel_color(0, 0),  
         '-' => WALL.get_pixel_color(0, 0),
-        'g' => 0xFF0000,                                
+        'g' => WALL.get_pixel_color(0, 0),                                
         _ => 0x717171,                                  
     };
 
@@ -333,7 +332,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     // Dibujar al jugador
     let player_x = minimap_x + (player.pos.x as f32 * minimap_scale) as usize;
     let player_y = minimap_y + (player.pos.y as f32 * minimap_scale) as usize;
-    framebuffer.set_current_color(0xFFFFFF);  
+    framebuffer.set_current_color(0x00A6FF);  
     framebuffer.point(player_x, player_y);
 
     // Dibujar los coleccionables
@@ -350,11 +349,11 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     for enemy in enemies {
         let enemy_x = minimap_x + (enemy.x * minimap_scale) as usize;
         let enemy_y = minimap_y + (enemy.y * minimap_scale) as usize;
-        framebuffer.set_current_color(0xFF0000);  
+        framebuffer.set_current_color(0xD32C2C);  
         framebuffer.point(enemy_x, enemy_y);
     }
     
-    let num_rays = 50;
+    let num_rays = 20;
     for i in 0..num_rays {
         let current_ray = i as f32 / num_rays as f32;
         let angle = player.a - (player.fov / 2.0) + (player.fov * current_ray);
@@ -362,7 +361,7 @@ fn render_minimap(framebuffer: &mut Framebuffer, player: &Player, maze: &Vec<Vec
     }
 }
 
-fn update_game_state(player: &mut Player, collectibles: &mut Vec<Collectible>, key_position: &Vec2) {
+fn update_game_state(player: &mut Player, collectibles: &mut Vec<Collectible>, key_position: &Vec2, game_state: &mut String) {
     let capture_distance = 10.0;
 
     // Actualizar coleccionables
@@ -381,22 +380,10 @@ fn update_game_state(player: &mut Player, collectibles: &mut Vec<Collectible>, k
     // Recolectar la llave si el jugador está cerca y la llave está renderizada
     if player.key_rendered && nalgebra_glm::distance(&player.pos, key_position) < capture_distance {
         player.key_collected = true;
-        player.key_rendered = false; // Opcional: Ocultar la llave una vez recolectada
+        player.key_rendered = false; 
+        *game_state = "SUCCESS".to_string();  
     }
-}
 
-fn check_door_crossing(player: &Player, maze: &Vec<Vec<char>>) -> bool {
-    let cell_x = ((player.pos.x - 50.0) / 100.0).floor() as usize;
-    let cell_y = ((player.pos.y - 50.0) / 100.0).floor() as usize;
-    if cell_y < maze.len() && cell_x < maze[cell_y].len() {
-        let is_door = maze[cell_y][cell_x] == 'g';
-        if is_door && player.key_collected {
-            println!("Door crossing validated.");
-        }
-        return is_door && player.key_collected;
-    }
-    println!("Door crossing check failed.");
-    false
 }
 
 fn main() {
@@ -420,6 +407,8 @@ fn main() {
 
     audio::play_background_music(); 
     show_start_screen("src\\assets\\screens\\welcome1.png");
+
+    let mut game_state = "PLAY".to_string(); 
 
     let mut window = Window::new(
         "Rust Graphics - FEED THE CAT",
@@ -489,45 +478,43 @@ fn main() {
         let width = framebuffer.width;
 
         player.process_events(&window, &mut gilrs, &maze);
-
         update_collectibles(&mut player, &mut collectibles);
         
         framebuffer.clear();
     
         let mut z_buffer = vec![f32::INFINITY; framebuffer.width]; 
 
-        render3d(&mut framebuffer, &player, &maze, &mut z_buffer); 
-        render_enemies(&mut framebuffer, &player, &enemies, &mut z_buffer);
-        render_collectibles(&mut framebuffer, &player, &collectibles, &mut z_buffer);
-        render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
-        text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
+        match game_state.as_str() {
+            "PLAY" => {
+                render3d(&mut framebuffer, &player, &maze, &mut z_buffer); 
+                render_enemies(&mut framebuffer, &player, &enemies, &mut z_buffer);
+                render_collectibles(&mut framebuffer, &player, &collectibles, &mut z_buffer);
+                render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
+                text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
+        
+                update_game_state(&mut player, &mut collectibles, &key_position, &mut game_state);
+                let fish_text = format!("Pescados capturados: {}/4", player.total_fishes);
+                text_renderer.render_text(&mut framebuffer, &fish_text, 20.0, 20.0, 0xFFFFFF);
+            
+                if player.key_rendered {
+                    let action_text = "¡Has alimentado al gato! Recolecta la llave para pasar de nivel.";
+                    text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
+                    let key_position = Vec2::new(791.0, 250.0);  
+                    render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
+                }
+            },
+            "SUCCESS" => {
+                framebuffer.set_background_color(0x000000); 
+                text_renderer.render_text(&mut framebuffer, "¡Felicidades has alimentado al gato! Presiona \"E\" para salir del juego.", 100.0, 100.0, 0xFFFFFF);
+                text_renderer.render_text(&mut framebuffer, "¡Gracias por jugar!", 100.0, 130.0, 0xFFFFFF);
 
-
-        update_game_state(&mut player, &mut collectibles, &key_position);
-        let fish_text = format!("Pescados capturados: {}/4", player.total_fishes);
-        text_renderer.render_text(&mut framebuffer, &fish_text, 20.0, 20.0, 0xFFFFFF);
-    
-        if player.key_collected {
-            let key_text = "Llaves recolectadas: 1/1";
-            text_renderer.render_text(&mut framebuffer, key_text, 20.0, 40.0, 0xFFFFFF);
-            let action_text = "¡Llave recolectada! Dirígete a la puerta.";
-            text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
-
-
-        } else if player.key_rendered {
-            let action_text = "¡Has alimentado al gato! Recolecta la llave para pasar de nivel.";
-            text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
-            let key_position = Vec2::new(791.0, 250.0);  
-            render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
+                if window.is_key_down(Key::E) {
+                    break; 
+                }
+            },
+            _ => {}
         }
         
-        if check_door_crossing(&player, &maze) && player.key_collected {
-            println!("Cruzando la puerta, mostrando pantalla de victoria...");
-            show_end_screen("src\\assets\\screens\\win.png");
-            break; // Rompe el bucle para cerrar el juego
-        }
-        
-        // Actualizar la ventana con el buffer del framebuffer
         window.update_with_buffer(&framebuffer.buffer, framebuffer.width, framebuffer.height).unwrap();
 
         std::thread::sleep(frame_delay);

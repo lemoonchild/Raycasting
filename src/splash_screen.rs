@@ -1,7 +1,6 @@
 use image::open;
 use minifb::{Key, Window, WindowOptions};
-use std::thread;
-use std::time::{Duration, Instant};
+
 
 pub fn load_image_to_buffer(image_path: &str) -> (Vec<u32>, u32, u32) {
     let img = open(image_path).expect("Failed to load image");
@@ -35,27 +34,5 @@ pub fn show_start_screen(image_path: &str) {
 
     while window.is_open() && !window.is_key_down(Key::S) {
         window.update();
-    }
-}
-
-pub fn show_end_screen(image_path: &str) {
-    let (buffer, width, height) = load_image_to_buffer(image_path);
-    let mut window = Window::new(
-        "Game Over - Congratulations",
-        width as usize,
-        height as usize,
-        WindowOptions::default(),
-    ).unwrap();
-
-    window.update_with_buffer(&buffer, width as usize, height as usize).unwrap();
-
-    // Planifica cerrar la ventana después de 3 segundos
-    let start_time = Instant::now();
-    while window.is_open() {
-        window.update();
-        if Instant::now().duration_since(start_time) > Duration::from_secs(3) {
-            window.limit_update_rate(None);  // Restaura la tasa de actualización a normal
-            break;
-        }
     }
 }
