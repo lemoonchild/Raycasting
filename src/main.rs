@@ -5,9 +5,10 @@ mod framebuffer;
 use framebuffer::Framebuffer;
 
 mod player;
-use player::{Player, process_events};
+use player::Player;
 
 use minifb::{Key, Window, WindowOptions};
+use splash_screen::{ show_start_screen, show_end_screen } ;
 use core::f32::consts::PI;
 
 use nalgebra_glm::{Vec2, distance};
@@ -33,6 +34,8 @@ mod textrender;
 use textrender::TextRenderer; 
 
 use std::time::Instant;
+
+use gilrs::{Gilrs, Event, Button, Axis, EventType};
 
 
 // Imagenes del juego
@@ -153,8 +156,8 @@ fn render_enemy(framebuffer: &mut Framebuffer, player: &Player, pos: &Vec2, z_bu
     let start_x = (screen_width / 2.0) + (relative_angle * (screen_width / player.fov)) - (sprite_size / 2.0);
     let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
 
-    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width);
-    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height);
+    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width) - 1;
+    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height) - 1;
     let start_x = start_x.max(0.0) as usize;
     let start_y = start_y.max(0.0) as usize;
 
@@ -217,8 +220,8 @@ fn render_collectible(framebuffer: &mut Framebuffer, player: &Player, collectibl
     let start_x = (screen_width / 2.0) + (relative_angle * (screen_width / player.fov)) - (sprite_size / 2.0);
     let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
 
-    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width);
-    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height);
+    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width) - 1;
+    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height) - 1;
     let start_x = start_x.max(0.0) as usize;
     let start_y = start_y.max(0.0) as usize;
 
@@ -292,8 +295,8 @@ fn render_key(framebuffer: &mut Framebuffer, player: &Player, key_position: &Vec
     let start_x = (screen_width / 2.0) + (relative_angle * (screen_width / player.fov)) - (sprite_size / 2.0);
     let start_y = (screen_height / 2.0) - (sprite_size / 2.0);
 
-    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width);
-    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height);
+    let end_x = ((start_x + sprite_size) as usize).min(framebuffer.width) - 1;
+    let end_y = ((start_y + sprite_size) as usize).min(framebuffer.height) - 1;
     let start_x = start_x.max(0.0) as usize;
     let start_y = start_y.max(0.0) as usize;
 
@@ -382,10 +385,26 @@ fn update_game_state(player: &mut Player, collectibles: &mut Vec<Collectible>, k
     }
 }
 
+fn check_door_crossing(player: &Player, maze: &Vec<Vec<char>>) -> bool {
+    let cell_x = ((player.pos.x - 50.0) / 100.0).floor() as usize;
+    let cell_y = ((player.pos.y - 50.0) / 100.0).floor() as usize;
+    if cell_y < maze.len() && cell_x < maze[cell_y].len() {
+        let is_door = maze[cell_y][cell_x] == 'g';
+        if is_door && player.key_collected {
+            println!("Door crossing validated.");
+        }
+        return is_door && player.key_collected;
+    }
+    println!("Door crossing check failed.");
+    false
+}
+
 fn main() {
 
     let font_data = std::fs::read("src\\assets\\fonts\\Montserrat-Medium.ttf").expect("failed to read font file");
     let text_renderer = TextRenderer::new(&font_data, 24.0);  // Ajusta el tamaño según necesites
+
+    let mut gilrs = Gilrs::new().unwrap();
 
     let window_width = 1300;
     let window_height = 900;
@@ -398,10 +417,9 @@ fn main() {
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
 
     let key_position = Vec2::new(791.0, 250.0);  // Posición fija para la llave
-    let door_position = Vec2::new(1133.00, 696.00); // Posición de la puerta
 
     audio::play_background_music(); 
-    splash_screen::show_splash_screen("src\\assets\\screens\\welcome1.png");
+    show_start_screen("src\\assets\\screens\\welcome1.png");
 
     let mut window = Window::new(
         "Rust Graphics - FEED THE CAT",
@@ -470,7 +488,8 @@ fn main() {
     
         let width = framebuffer.width;
 
-        process_events(&window, &mut player, &maze);
+        player.process_events(&window, &mut gilrs, &maze);
+
         update_collectibles(&mut player, &mut collectibles);
         
         framebuffer.clear();
@@ -480,13 +499,11 @@ fn main() {
         render3d(&mut framebuffer, &player, &maze, &mut z_buffer); 
         render_enemies(&mut framebuffer, &player, &enemies, &mut z_buffer);
         render_collectibles(&mut framebuffer, &player, &collectibles, &mut z_buffer);
-
         render_minimap(&mut framebuffer, &player, &maze, minimap_x, minimap_y, minimap_scale, &collectibles, &enemies);
         text_renderer.render_text(&mut framebuffer, &fps_text, width as f32 - 150.0, 20.0, 0xFFFFFF);
 
 
         update_game_state(&mut player, &mut collectibles, &key_position);
-
         let fish_text = format!("Pescados capturados: {}/4", player.total_fishes);
         text_renderer.render_text(&mut framebuffer, &fish_text, 20.0, 20.0, 0xFFFFFF);
     
@@ -495,6 +512,8 @@ fn main() {
             text_renderer.render_text(&mut framebuffer, key_text, 20.0, 40.0, 0xFFFFFF);
             let action_text = "¡Llave recolectada! Dirígete a la puerta.";
             text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
+
+
         } else if player.key_rendered {
             let action_text = "¡Has alimentado al gato! Recolecta la llave para pasar de nivel.";
             text_renderer.render_text(&mut framebuffer, action_text, 400.0, 100.0, 0xFFFFFF);
@@ -502,20 +521,18 @@ fn main() {
             render_key(&mut framebuffer, &player, &key_position, &mut z_buffer, &KEY, player.key_rendered);
         }
         
-        if player.key_collected && nalgebra_glm::distance(&player.pos, &door_position) < 10.0 {
-            // Mostrar pantalla de victoria o terminar el juego
-            splash_screen::show_splash_screen("src\\assets\\screens\\win.png");
-            break; // Salir del bucle para terminar el juego
+        if check_door_crossing(&player, &maze) && player.key_collected {
+            println!("Cruzando la puerta, mostrando pantalla de victoria...");
+            show_end_screen("src\\assets\\screens\\win.png");
+            break; // Rompe el bucle para cerrar el juego
         }
-
-        println!("Posición del jugador: x = {}, y = {}", player.pos.x, player.pos.y);
-
-
+        
         // Actualizar la ventana con el buffer del framebuffer
         window.update_with_buffer(&framebuffer.buffer, framebuffer.width, framebuffer.height).unwrap();
 
         std::thread::sleep(frame_delay);
     }
+    
 }
 
 

@@ -1,3 +1,4 @@
+use gilrs::{Axis, Button, EventType, Gilrs};
 use minifb::{Window, Key, MouseMode};
 use nalgebra_glm::{Vec2, rotate_vec2};
 use std::f32::consts::PI;
@@ -8,61 +9,99 @@ pub struct Player {
     pub a: f32, // Ángulo de visión
     pub fov: f32, // Campo de visión
     pub total_fishes: u32, // total de pescados capturados
-    pub key_rendered: bool, // renderizado de la key
+    pub key_rendered: bool, // renderizado de la llave
     pub key_collected: bool, // obtener la llave del nivel
 }
 
-static mut LAST_MOUSE_X: f32 = 0.0; // Variable global para almacenar la última posición del mouse
+impl Player {
+    pub fn process_events(&mut self, window: &Window, gilrs: &mut Gilrs, maze: &Vec<Vec<char>>) {
+        const MOVE_SPEED: f32 = 5.0;
+        const ROTATION_SPEED: f32 = 0.005;
+        const STRAFE_SPEED: f32 = 10.0;
 
-pub fn process_events(window: &Window, player: &mut Player, maze: &Vec<Vec<char>>) {
-    const MOVE_SPEED: f32 = 10.0;
-    const ROTATION_SPEED: f32 = 0.005;
-    const STRAFE_SPEED: f32 = 10.0;
+        // Procesamiento del ratón para la rotación
+        let (mouse_x, _) = window.get_mouse_pos(MouseMode::Pass).unwrap_or((0.0, 0.0));
+        unsafe {
+            static mut LAST_MOUSE_X: f32 = 0.0;
+            let mouse_dx = mouse_x - LAST_MOUSE_X;
+            LAST_MOUSE_X = mouse_x;
+            self.a += mouse_dx * ROTATION_SPEED;
+        }
 
-    // Capturar la posición del mouse
-    let (mouse_x, _) = window.get_mouse_pos(MouseMode::Pass).unwrap_or((0.0, 0.0));
+        // Procesamiento de teclado para el movimiento
+        self.process_keyboard(window, maze, MOVE_SPEED, STRAFE_SPEED);
 
-    unsafe {
-        // Calcular el cambio en la posición x del mouse desde la última actualización
-        let mouse_dx = mouse_x - LAST_MOUSE_X;
-        LAST_MOUSE_X = mouse_x; // Actualizar la última posición del mouse
-
-        // Ajustar el ángulo de visión del jugador según el movimiento horizontal del mouse
-        player.a += mouse_dx * ROTATION_SPEED;
+        // Procesamiento de eventos de mando
+        self.process_gamepad(gilrs, maze, MOVE_SPEED);
     }
 
-    let forward_x = player.pos.x + MOVE_SPEED * player.a.cos();
-    let forward_y = player.pos.y + MOVE_SPEED * player.a.sin();
+    fn move_if_possible(&mut self, movement: &Vec2, maze: &Vec<Vec<char>>) {
+        let new_pos = self.pos + movement;
+        if !is_wall(maze, new_pos.x as usize, new_pos.y as usize, self.key_collected) {
+            self.pos = new_pos;
+        }
+    }    
 
-    let backward_x = player.pos.x - MOVE_SPEED * player.a.cos();
-    let backward_y = player.pos.y - MOVE_SPEED * player.a.sin();
+    fn process_keyboard(&mut self, window: &Window, maze: &Vec<Vec<char>>, move_speed: f32, strafe_speed: f32) {
+        let forward = Vec2::new(self.a.cos(), self.a.sin());
+        let right = rotate_vec2(&forward, -PI / 2.0);
 
-    // Calcular las direcciones de strafe (izquierda y derecha)
-    let right_vector = rotate_vec2(&Vec2::new(player.a.cos(), player.a.sin()), -PI / 2.0);
-    let strafe_right_x = player.pos.x - STRAFE_SPEED * right_vector.x;
-    let strafe_right_y = player.pos.y - STRAFE_SPEED * right_vector.y;
-
-    let strafe_left_x = player.pos.x + STRAFE_SPEED * right_vector.x;
-    let strafe_left_y = player.pos.y + STRAFE_SPEED * right_vector.y;
-
-    // Procesar entrada de teclado para movimiento adelante y atrás
-    if window.is_key_down(Key::W) && !is_wall(maze, forward_x as usize, forward_y as usize) {
-        player.pos.x = forward_x;
-        player.pos.y = forward_y;
-    }
-    if window.is_key_down(Key::S) && !is_wall(maze, backward_x as usize, backward_y as usize) {
-        player.pos.x = backward_x;
-        player.pos.y = backward_y;
-    }
-
-    // Procesar entrada de teclado para movimiento lateral (strafe)
-    if window.is_key_down(Key::D) && !is_wall(maze, strafe_right_x as usize, strafe_right_y as usize) {
-        player.pos.x = strafe_right_x;
-        player.pos.y = strafe_right_y;
-    }
-    if window.is_key_down(Key::A) && !is_wall(maze, strafe_left_x as usize, strafe_left_y as usize) {
-        player.pos.x = strafe_left_x;
-        player.pos.y = strafe_left_y;
+        if window.is_key_down(Key::W) {
+            self.move_if_possible(&(forward * move_speed), maze);
+        }
+        if window.is_key_down(Key::S) {
+            self.move_if_possible(&(forward * -move_speed), maze);
+        }
+        if window.is_key_down(Key::D) {
+            self.move_if_possible(&(right * -strafe_speed), maze);
+        }
+        if window.is_key_down(Key::A) {
+            self.move_if_possible(&(right * strafe_speed), maze);
+        }
+    
     }
 
+    fn process_gamepad(&mut self, gilrs: &mut Gilrs, maze: &Vec<Vec<char>>, move_speed: f32) {
+        const DEAD_ZONE: f32 = 0.1;  
+        const ROTATION_SPEED_CONTROLLER: f32 = 0.05; 
+    
+        while let Some(event) = gilrs.next_event() {
+            gilrs.update(&event);
+            match event.event {
+                EventType::AxisChanged(Axis::RightStickX, value, _) if value.abs() > DEAD_ZONE => {
+                    
+                    self.a += value * ROTATION_SPEED_CONTROLLER;
+                },
+                EventType::AxisChanged(Axis::LeftStickY, value, _) if value.abs() > DEAD_ZONE => {
+                    let forward = Vec2::new(self.a.cos(), self.a.sin());
+                    let movement = forward * (value * move_speed);
+                    let new_pos = self.pos + movement;
+                    if !is_wall(maze, new_pos.x as usize, new_pos.y as usize, self.key_collected) {
+                        self.pos = new_pos; 
+                    }
+                },
+                EventType::ButtonPressed(button, _) => {
+                    match button {
+                        Button::DPadUp => {
+                            let forward = Vec2::new(self.a.cos(), self.a.sin()) * move_speed;
+                            let new_pos = self.pos + forward;
+                            if !is_wall(maze, new_pos.x as usize, new_pos.y as usize, self.key_collected) {
+                                self.pos = new_pos;
+                            }
+                        },
+                        Button::DPadDown => {
+                            let backward = Vec2::new(self.a.cos(), self.a.sin()) * -move_speed;
+                            let new_pos = self.pos + backward;
+                            if !is_wall(maze, new_pos.x as usize, new_pos.y as usize, self.key_collected) {
+                                self.pos = new_pos;
+                            }
+                        },
+                        _ => {}
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+    
 }
